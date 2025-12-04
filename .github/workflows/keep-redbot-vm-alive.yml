@@ -2,8 +2,8 @@ name: Auto Start Azure VM
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
+    - cron: "*/5 * * * *"   # Check every 5 minutes
+  workflow_dispatch:        # Allow manual run
 
 jobs:
   start_vm:
@@ -13,19 +13,26 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v1
         with:
-          creds: '{"clientId":"${{ secrets.AZ_CLIENT_ID }}","clientSecret":"${{ secrets.AZ_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZ_SUBSCRIPTION }}","tenantId":"${{ secrets.AZ_TENANT_ID }}"}'
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Start VM if stopped
+      - name: Check VM status
+        id: status
         run: |
           STATUS=$(az vm get-instance-view \
-            --resource-group "${{ secrets.VM_RESOURCE_GROUP }}" \
-            --name "${{ secrets.VM_NAME }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ secrets.AZURE_VM_NAME }}" \
             --query "instanceView.statuses[1].code" -o tsv)
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-          if [ "$STATUS" != "PowerState/running" ]; then
-            echo "Starting VM..."
-            az vm start --resource-group "${{ secrets.VM_RESOURCE_GROUP }}" --name "${{ secrets.VM_NAME }}"
-          else
-            echo "VM is already running."
-          fi
+      - name: Start VM if needed
+        if: steps.status.outputs.status != 'PowerState/running'
+        run: |
+          echo "VM is offline. Starting..."
+          az vm start \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ secrets.AZURE_VM_NAME }}"
+          echo "VM started."
 
+      - name: VM is running
+        if: steps.status.outputs.status == 'PowerState/running'
+        run: echo "VM is already running. No action needed."
