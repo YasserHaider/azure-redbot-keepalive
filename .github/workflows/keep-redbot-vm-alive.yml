@@ -1,1 +1,31 @@
+name: Auto Start Azure VM
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  start_vm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: '{"clientId":"${{ secrets.AZ_CLIENT_ID }}","clientSecret":"${{ secrets.AZ_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZ_SUBSCRIPTION }}","tenantId":"${{ secrets.AZ_TENANT_ID }}"}'
+
+      - name: Start VM if stopped
+        run: |
+          STATUS=$(az vm get-instance-view \
+            --resource-group "${{ secrets.VM_RESOURCE_GROUP }}" \
+            --name "${{ secrets.VM_NAME }}" \
+            --query "instanceView.statuses[1].code" -o tsv)
+
+          if [ "$STATUS" != "PowerState/running" ]; then
+            echo "Starting VM..."
+            az vm start --resource-group "${{ secrets.VM_RESOURCE_GROUP }}" --name "${{ secrets.VM_NAME }}"
+          else
+            echo "VM is already running."
+          fi
 
